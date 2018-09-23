@@ -94,8 +94,12 @@ func DownloadThreads(group string, workers int) {
 }
 
 func main() {
-	group := "vim_use"
-	workers := 10
+	if len(os.Args) < 3 {
+		fmt.Fprintf(os.Stderr, "./crawler <group-name> <worker-count>\n")
+		return
+	}
+	group := os.Args[1]
+	workers, _ := strconv.Atoi(os.Args[2])
 	MkdirAll(group)
 	DownloadThreads(group, workers)
 }
