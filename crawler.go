@@ -12,7 +12,7 @@ import (
 )
 
 func MkdirAll(group string) {
-	fmt.Printf("mkdir %s\n", group)
+	fmt.Printf(":: mkdir %s/\n", group)
 	os.MkdirAll(fmt.Sprintf("%s/threads", group), 0700)
 	os.MkdirAll(fmt.Sprintf("%s/msgs", group), 0700)
 	os.MkdirAll(fmt.Sprintf("%s/mbox", group), 0700)
@@ -79,7 +79,7 @@ func DownloadThreads(group string, workers int) {
 	for i := 0; i < total/100; i++ {
 		jobs <- [2]int{i*100 + 1, (i + 1) * 100}
 	}
-	if total%100 > 0 {
+	if total > 100 && total%100 > 0 {
 		jobs <- [2]int{total - total%100, total}
 	}
 	close(jobs)
