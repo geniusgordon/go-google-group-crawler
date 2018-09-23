@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 func MkdirAll(group string) {
@@ -21,9 +23,9 @@ func MkdirAll(group string) {
 	os.MkdirAll(fmt.Sprintf("%s/mbox/tmp", group), 0700)
 }
 
-func DumpLinksFromUrl(group string, url string, output_filename string) int {
+func DumpLinksFromUrl(t string, group string, url string, output_filename string) int {
 	r_total, _ := regexp.Compile("<i>.*?([0-9]+).*?([0-9]+).*?([0-9]+).*?</i>")
-	r_url, _ := regexp.Compile(fmt.Sprintf("\"(https?://.*?/d/topic/%s.*?)\"", group))
+	r_url, _ := regexp.Compile(fmt.Sprintf("\"(https?://.*?/d/%s/%s.*?)\"", t, group))
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -58,22 +60,18 @@ func DumpLinksFromUrl(group string, url string, output_filename string) int {
 	return total
 }
 
-func DownloadPageWorker(id int, group string, url string, output_prefix string, jobs <-chan [2]int, results chan<- int) {
+func DownloadPageWorker(id int, t string, group string, url string, output_prefix string, jobs <-chan [2]int, results chan<- int) {
 	for r := range jobs {
-		fmt.Printf(":: Downloading threads from %s[%d-%d] by worker[%d]\n", group, r[0], r[1], id)
+		fmt.Printf(":: Downloading %s from %s[%d-%d] by worker[%d]\n", t, group, r[0], r[1], id)
 		url_with_range := fmt.Sprintf("%s[%d-%d]", url, r[0], r[1])
 		output_filename := fmt.Sprintf("%s.%d.%d", output_prefix, r[0], r[1])
-		DumpLinksFromUrl(group, url_with_range, output_filename)
+		DumpLinksFromUrl(t, group, url_with_range, output_filename)
 	}
 	results <- id
 }
 
-func DownloadThreads(group string, workers int) {
-	url := fmt.Sprintf("https://groups.google.com/forum/?_escaped_fragment_=forum/%s", group)
-	fmt.Printf(":: Downloading threads from %s\n", group)
-	output_prefix := fmt.Sprintf("%s/threads/t", group)
-	total := DumpLinksFromUrl(group, url, output_prefix+".0")
-	fmt.Printf(":: Total threads %d\n", total)
+func DownloadPages(t string, group string, url string, output_prefix string, workers int) {
+	total := DumpLinksFromUrl(t, group, url, output_prefix+".0")
 
 	jobs := make(chan [2]int, total/100+1)
 	for i := 0; i < total/100; i++ {
@@ -86,8 +84,61 @@ func DownloadThreads(group string, workers int) {
 
 	results := make(chan int)
 	for i := 0; i < workers; i++ {
-		go DownloadPageWorker(i, group, url, output_prefix, jobs, results)
+		go DownloadPageWorker(i, t, group, url, output_prefix, jobs, results)
 	}
+	for i := 0; i < workers; i++ {
+		<-results
+	}
+}
+
+func DownloadThreads(group string, workers int) {
+	url := fmt.Sprintf("https://groups.google.com/forum/?_escaped_fragment_=forum/%s", group)
+	output_prefix := fmt.Sprintf("%s/threads/t", group)
+	fmt.Printf(":: Download topic from %s\n", group)
+	DownloadPages("topic", group, url, output_prefix, workers)
+}
+
+func DownloadMessagesWorker(id int, group string, workers int, jobs <-chan string, results chan<- int) {
+	output_prefix := fmt.Sprintf("%s/msgs/m", group)
+	for url := range jobs {
+		ss := strings.Split(url, "/")
+		msg_id := ss[len(ss)-1]
+		fmt.Printf(":: Downloading msg from %s/%s by worker[%d]\n", group, msg_id, id)
+		DownloadPages("msg", group, url, fmt.Sprintf("%s.%s", output_prefix, msg_id), workers)
+	}
+	results <- 1
+}
+
+func DownloadMessages(group string, workers int) {
+	dir := fmt.Sprintf("%s/threads/", group)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	jobs := make(chan string, 100)
+
+	results := make(chan int)
+	for i := 0; i < workers; i++ {
+		go DownloadMessagesWorker(i, group, workers, jobs, results)
+	}
+
+	for _, f := range files {
+		file, err := os.Open(fmt.Sprintf("%s/%s", dir, f.Name()))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			text := scanner.Text()
+			url := strings.Replace(text, "/d/topic/", "/forum/?_escaped_fragment_=topic/", -1)
+			jobs <- url
+		}
+	}
+
+	close(jobs)
 	for i := 0; i < workers; i++ {
 		<-results
 	}
@@ -102,4 +153,5 @@ func main() {
 	workers, _ := strconv.Atoi(os.Args[2])
 	MkdirAll(group)
 	DownloadThreads(group, workers)
+	DownloadMessages(group, workers)
 }
