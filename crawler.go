@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -62,7 +63,7 @@ func DumpLinksFromUrl(t string, group string, url string, output_filename string
 
 func DownloadPageWorker(id int, t string, group string, url string, output_prefix string, jobs <-chan [2]int, results chan<- int) {
 	for r := range jobs {
-		fmt.Printf(":: Downloading %s from %s[%d-%d] by worker[%d]\n", t, group, r[0], r[1], id)
+		fmt.Printf(":: Download %s from %s[%d-%d] by worker[%d]\n", t, group, r[0], r[1], id)
 		url_with_range := fmt.Sprintf("%s[%d-%d]", url, r[0], r[1])
 		output_filename := fmt.Sprintf("%s.%d.%d", output_prefix, r[0], r[1])
 		DumpLinksFromUrl(t, group, url_with_range, output_filename)
@@ -103,7 +104,7 @@ func DownloadMessagesWorker(id int, group string, workers int, jobs <-chan strin
 	for url := range jobs {
 		ss := strings.Split(url, "/")
 		msg_id := ss[len(ss)-1]
-		fmt.Printf(":: Downloading msg from %s/%s by worker[%d]\n", group, msg_id, id)
+		fmt.Printf(":: Download msg from %s/%s by worker[%d]\n", group, msg_id, id)
 		DownloadPages("msg", group, url, fmt.Sprintf("%s.%s", output_prefix, msg_id), workers)
 	}
 	results <- 1
@@ -144,6 +145,71 @@ func DownloadMessages(group string, workers int) {
 	}
 }
 
+func DownloadRawMessage(url string, output_filename string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	output_file, err := os.Create(output_filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = io.Copy(output_file, resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func DownloadRawMessagesWorker(id int, group string, workers int, jobs <-chan string, results chan<- int) {
+	output_prefix := fmt.Sprintf("%s/mbox/cur/m", group)
+	for url := range jobs {
+		ss := strings.Split(url, "/")
+		msg_id := fmt.Sprintf("%s.%s", ss[len(ss)-2], ss[len(ss)-1])
+		fmt.Printf(":: Download raw msg from %s/%s by worker[%d]\n", group, msg_id, id)
+		output_filename := output_prefix + "." + msg_id
+		DownloadRawMessage(url, output_filename)
+	}
+	results <- 1
+}
+
+func DownloadRawMessages(group string, workers int) {
+	dir := fmt.Sprintf("%s/msgs/", group)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	jobs := make(chan string, 100)
+
+	results := make(chan int)
+	for i := 0; i < workers; i++ {
+		go DownloadRawMessagesWorker(i, group, workers, jobs, results)
+	}
+
+	for _, f := range files {
+		file, err := os.Open(fmt.Sprintf("%s/%s", dir, f.Name()))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			text := scanner.Text()
+			url := strings.Replace(text, "/d/msg/", "/forum/message/raw?msg=", -1)
+			jobs <- url
+		}
+	}
+
+	close(jobs)
+	for i := 0; i < workers; i++ {
+		<-results
+	}
+}
+
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintf(os.Stderr, "./crawler <group-name> <worker-count>\n")
@@ -154,4 +220,5 @@ func main() {
 	MkdirAll(group)
 	DownloadThreads(group, workers)
 	DownloadMessages(group, workers)
+	DownloadRawMessages(group, workers)
 }
