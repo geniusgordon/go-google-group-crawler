@@ -2,6 +2,11 @@
 
 A google group crawler written in go
 
+This crawler downloads messages in `RFC 822` format that can be imported
+into your email clients (`Mutt`, `Thunderbird`, etc.)
+
+![mutt screenshot](https://raw.githubusercontent.com/geniusgordon/go-google-group-crawler/master/mutt.png)
+
 ## Usage
 
 ```
@@ -12,6 +17,10 @@ Usage of crawler:
   -t int
         Threads count (default 1)
 ```
+
+## Credits
+
+This project is inspired by [icy/google-group-crawler](https://github.com/icy/google-group-crawler), a bash version of the crawler
 
 ## License
 
