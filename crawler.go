@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -222,14 +223,18 @@ func DownloadRawMessages(group string, workers int) {
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, "./crawler <group-name> <worker-count>\n")
+	groupPtr := flag.String("g", "", "Group name")
+	workerNumPtr := flag.Int("t", 1, "Threads count")
+
+	flag.Parse()
+
+	if *groupPtr == "" {
+		flag.Usage()
 		return
 	}
-	group := os.Args[1]
-	workers, _ := strconv.Atoi(os.Args[2])
-	MkdirAll(group)
-	DownloadThreads(group, workers)
-	DownloadMessages(group, workers)
-	DownloadRawMessages(group, workers)
+
+	MkdirAll(*groupPtr)
+	DownloadThreads(*groupPtr, *workerNumPtr)
+	DownloadMessages(*groupPtr, *workerNumPtr)
+	DownloadRawMessages(*groupPtr, *workerNumPtr)
 }
