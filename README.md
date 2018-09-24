@@ -12,3 +12,7 @@ Usage of crawler:
   -t int
         Threads count (default 1)
 ```
+
+## License
+
+Go Google Group Crawler is open source software [licensed as MIT](https://github.com/geniusgordon/go-google-group-crawler/blob/master/LICENSE).
