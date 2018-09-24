@@ -24,9 +24,10 @@ func MkdirAll(group string) {
 	os.MkdirAll(fmt.Sprintf("%s/mbox/tmp", group), 0700)
 }
 
-func DumpLinksFromUrl(t string, group string, url string, output_filename string) int {
+func DumpLinksFromUrl(t string, group string, url string, output_filename string) (int, int) {
 	r_total, _ := regexp.Compile("<i>.*?([0-9]+).*?([0-9]+).*?([0-9]+).*?</i>")
-	r_url, _ := regexp.Compile(fmt.Sprintf("\"(https?://.*?/d/%s/%s.*?)\"", t, group))
+	r_url, _ := regexp.Compile("\"(https?://.*?)\"")
+	r_d, _ := regexp.Compile(fmt.Sprintf("/d/%s/%s", t, group))
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -41,6 +42,7 @@ func DumpLinksFromUrl(t string, group string, url string, output_filename string
 	}
 
 	total := 0
+	count := 0
 
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -53,12 +55,17 @@ func DumpLinksFromUrl(t string, group string, url string, output_filename string
 			sort.Ints(t)
 			total = t[2]
 		} else if r_url.MatchString(text) {
-			match_url := r_url.FindStringSubmatch(text)[1]
-			output_file.WriteString(match_url)
-			output_file.WriteString("\n")
+			match_url := r_url.FindAllStringSubmatch(text, -1)
+			for _, m_url := range match_url {
+				if r_d.MatchString(m_url[1]) {
+					output_file.WriteString(m_url[1])
+					output_file.WriteString("\n")
+					count++
+				}
+			}
 		}
 	}
-	return total
+	return total, count
 }
 
 func DownloadPageWorker(id int, t string, group string, url string, output_prefix string, jobs <-chan [2]int, results chan<- int) {
@@ -72,10 +79,14 @@ func DownloadPageWorker(id int, t string, group string, url string, output_prefi
 }
 
 func DownloadPages(t string, group string, url string, output_prefix string, workers int) {
-	total := DumpLinksFromUrl(t, group, url, output_prefix+".0")
+	total, count := DumpLinksFromUrl(t, group, url, output_prefix+".0")
+	if total == count {
+		return
+	}
 
 	jobs := make(chan [2]int, total/100+1)
-	for i := 0; i < total/100; i++ {
+	jobs <- [2]int{count + 1, 100}
+	for i := 1; i < total/100; i++ {
 		jobs <- [2]int{i*100 + 1, (i + 1) * 100}
 	}
 	if total > 100 && total%100 > 0 {
