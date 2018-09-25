@@ -7,6 +7,8 @@ into your email clients (`Mutt`, `Thunderbird`, etc.)
 
 ![mutt screenshot](https://raw.githubusercontent.com/geniusgordon/go-google-group-crawler/master/mutt.png)
 
+> Example of messages downloaded from [vim_use](https://groups.google.com/forum/#!forum/vim_use)
+
 ## Usage
 
 ```
@@ -17,6 +19,11 @@ Usage of crawler:
   -t int
         Threads count (default 1)
 ```
+
+## Todos
+
+- [ ] Download new messages
+- [ ] Private group
 
 ## Credits
 
