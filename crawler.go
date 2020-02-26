@@ -42,6 +42,8 @@ func DumpLinksFromUrl(t string, group string, url string, output_filename string
 		log.Fatal(err)
 	}
 
+	defer output_file.Close()
+
 	total := 0
 	count := 0
 
@@ -141,7 +143,6 @@ func DownloadMessages(group string, workers int) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer file.Close()
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
@@ -149,6 +150,8 @@ func DownloadMessages(group string, workers int) {
 			url := strings.Replace(text, "/d/topic/", "/forum/?_escaped_fragment_=topic/", -1)
 			jobs <- url
 		}
+
+		file.Close()
 	}
 
 	close(jobs)
@@ -169,7 +172,10 @@ func DownloadRawMessage(url string, output_filename string) {
 		log.Fatal(err)
 	}
 
+	defer output_file.Close()
+
 	_, err = io.Copy(output_file, resp.Body)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -206,7 +212,6 @@ func DownloadRawMessages(group string, workers int) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer file.Close()
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
@@ -214,6 +219,7 @@ func DownloadRawMessages(group string, workers int) {
 			url := strings.Replace(text, "/d/msg/", "/forum/message/raw?msg=", -1)
 			jobs <- url
 		}
+		file.Close()
 	}
 
 	close(jobs)
